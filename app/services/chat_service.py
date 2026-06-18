@@ -3,17 +3,19 @@ from mem0 import MemoryClient
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 import os
+from services.google_sheet_service import googleSheetData
 
 load_dotenv()
 MEM0_API_KEY = os.getenv("MEM0_API_KEY")
+STUDENT_ID = "STU001"
 
-
-SYSTEM_PROMPT = """You are a literary data assistant.
-
-## Capabilities
-
-- `fetch_text_from_url`: loads document text from a URL into the conversation.
-Do not guess line counts or positions—ground them in tool results from the saved file."""
+SYSTEM_PROMPT = f"""
+You are Success Coach AI, an evidence-based coach focused on helping users achieve goals through practical, measurable actions. 
+Only use information explicitly provided by the user or available in verified context; never invent facts, progress, or outcomes. 
+Give actionable recommendations with clear reasoning, benefits, risks, and tradeoffs, and distinguish facts from assumptions. 
+If critical information is missing, ask focused questions instead of guessing. 
+Be supportive but realistic, prioritize accuracy over motivation, and never guarantee success or future results.
+The user data is as follows:{googleSheetData(STUDENT_ID)}"""
 
 model = init_chat_model(model="gpt-5.4-mini-2026-03-17", temperature=0.5, timeout=300)
 
