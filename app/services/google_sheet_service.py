@@ -1,19 +1,18 @@
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 import os
-from pathlib import Path
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
-BASE_DIR = Path(__file__).parent.parent.parent
+
+creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 
 
 def googleSheetData(student_id: str):
     SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-    flow = InstalledAppFlow.from_client_secrets_file(
-        BASE_DIR / "credentials.json", scopes=SCOPES
-    )
+    flow = InstalledAppFlow.from_client_config(creds_dict, scopes=SCOPES)
     creds = flow.run_local_server(port=0)
     service = build("sheets", "v4", credentials=creds)
 
