@@ -6,7 +6,7 @@ from app.services.google_sheet_service import googleSheetData
 import streamlit as st
 
 load_dotenv()
-STUDENT_ID = "STU001"
+STUDENT_ID = st.session_state.student_id or "STU001"
 
 SYSTEM_PROMPT = f"""
 You are Success Coach AI, an evidence-based coach focused on helping users achieve goals through practical, measurable actions. 
