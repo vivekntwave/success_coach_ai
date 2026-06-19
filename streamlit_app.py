@@ -1,4 +1,6 @@
 import streamlit as st
+import uuid
+
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -11,6 +13,15 @@ if "student_id" not in st.session_state:
 
 if "student_name" not in st.session_state:
     st.session_state.student_name = None
+
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
+if "last_saved_index" not in st.session_state:
+    st.session_state.last_saved_index = 0
+
+if "session_summary_saved" not in st.session_state:
+    st.session_state.session_summary_saved = False
 
 ROLES = [None, "Student", "Coach"]
 
