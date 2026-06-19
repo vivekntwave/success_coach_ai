@@ -1,5 +1,5 @@
 import streamlit as st
-from services.chat_service import chatResponse
+from app.services.chat_service import chatResponse
 
 if "messages" not in st.session_state:
     st.session_state.messages = []

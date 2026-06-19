@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from chroma_db.chroma_client import search_knowledge_base
-from services.google_sheet_service import googleSheetData
+from app.services.google_sheet_service import googleSheetData
 import streamlit as st
 
 load_dotenv()
