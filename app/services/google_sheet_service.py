@@ -76,22 +76,34 @@ def googleStudentData(student_id: str):
 def googleSummaryUpdate(summary):
     client = get_sheets_client()
     if client is None:
-        return
+        return False
     spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
     try:
         spreadsheet = client.open_by_key(str(spreadsheet_id))
         worksheet = spreadsheet.worksheet("signal_sheet")
+        student_id = str(st.session_state.student_id)
+        records = worksheet.get_all_records()
+        row_number = None
+        for idx, record in enumerate(records, start=2):  # header is row 1
+            if str(record["student_id"]) == student_id:
+                row_number = idx
+                break
         row = [
-            st.session_state.student_id,
-            summary["signal_type"],
-            summary["severity"],
-            summary["urgency"],
-            summary["reason"],
-            summary["timestamp"],
+            student_id,
+            str(summary["signal_type"]),
+            str(summary["severity"]),
+            str(summary["urgency"]),
+            str(summary["reason"]),
+            str(summary["timestamp"]),
             "No",
         ]
-        worksheet.append_row(row)
+        if row_number:
+            worksheet.update(range_name=f"A{row_number}:G{row_number}", values=[row])
+        else:
+            worksheet.append_row(row)
 
         return True
+
     except Exception as e:
         st.error(f"Google Sheets Error: {e}")
+        return False
