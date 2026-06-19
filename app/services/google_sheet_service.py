@@ -21,7 +21,25 @@ def get_sheets_client():
         return None
 
 
-def googleSheetData(student_id: str):
+def googleSheetData(sheet_name: str):
+    client = get_sheets_client()
+    if client is None:
+        return {}
+
+    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
+
+    try:
+        spreadsheet = client.open_by_key(str(spreadsheet_id))
+        worksheet = spreadsheet.worksheet(sheet_name)
+        return worksheet.get_all_records()
+
+    except Exception as e:
+        st.error(f"Google Sheets Error: {e}")
+        return {}
+
+
+@st.cache_resource
+def googleStudentData(student_id: str):
     client = get_sheets_client()
 
     if client is None:
@@ -53,3 +71,27 @@ def googleSheetData(student_id: str):
     except Exception as e:
         st.error(f"Google Sheets Error: {e}")
         return {}
+
+
+def googleSummaryUpdate(summary):
+    client = get_sheets_client()
+    if client is None:
+        return
+    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
+    try:
+        spreadsheet = client.open_by_key(str(spreadsheet_id))
+        worksheet = spreadsheet.worksheet("signal_sheet")
+        row = [
+            st.session_state.student_id,
+            summary["signal_type"],
+            summary["severity"],
+            summary["urgency"],
+            summary["reason"],
+            summary["timestamp"],
+            "No",
+        ]
+        worksheet.append_row(row)
+
+        return True
+    except Exception as e:
+        st.error(f"Google Sheets Error: {e}")

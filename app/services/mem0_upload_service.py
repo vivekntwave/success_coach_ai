@@ -1,3 +1,4 @@
+from datetime import datetime
 from dotenv import load_dotenv
 from mem0 import MemoryClient
 from pathlib import Path
@@ -6,6 +7,7 @@ import streamlit as st
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 import json
+from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
@@ -34,17 +36,57 @@ Return ONLY valid JSON — no markdown fences, no preamble:
 
 SESSION_SUMMARY_PROMPT = """
 You are a coaching session summariser.
- 
-Given a full coaching conversation (both coach and student turns), write a
-single summary paragraph of 4–6 sentences covering:
-- The main topics discussed
-- Key insights or realisations the student had
-- Decisions made and commitments or action items agreed on
-- Any follow-up plans
- 
-Return ONLY valid JSON — no markdown fences, no preamble:
-{"session_summary": "..."}
+
+Given a full coaching conversation (both coach and student turns), produce a
+comprehensive coaching summary that will be used as long-term memory and future
+session context.
+
+The session_summary should be a single concise narrative (4-8 sentences)
+covering:
+
+* Main discussion topics
+* Current academic situation
+* Current emotional situation
+* Significant changes since previous sessions
+* Unresolved concerns or risks
+* Student commitments and action items
+* Coach follow-up items
+* Key insights, decisions, or breakthroughs
+
+Also generate a coaching signal representing the most important concern arising
+from this session.
+
+Return ONLY valid JSON:
+
+{
+"session_summary": "...",
+"student_id": "...",
+"signal_type": "...",
+"severity": high,
+"urgency": high,
+"reason": "...",
+"timestamp": "..."
+}
+
+Field definitions:
+
+* student_id: Student identifier provided in the input.
+* signal_type: One of ["crisis", "check_in", "follow_up"].
+* severity: Integer from [critical,high,medium,low] representing how serious the issue is.
+* urgency: Integer from [critical,high,medium,low] representing how quickly the coach should act.
+* reason: One-sentence explanation for the signal and score assignment.
+* timestamp: Session timestamp provided in the input.
+
+Scoring guidance:
+
+* Severity measures seriousness of the issue.
+* Urgency measures whether action is needed today versus later.
+* High severity does not automatically imply high urgency.
+* If no meaningful concern exists, use low severity and urgency scores rather than inventing a problem.
+
+Return ONLY the JSON object.
 """
+
 model = init_chat_model(model="gpt-5.4-mini-2026-03-17", temperature=0.5, timeout=300)
 
 
@@ -95,7 +137,8 @@ def session_summary():
         f"{m['role'].capitalize()}: {m['content']}" for m in messages
     )
 
-    extracted = call_llm(SESSION_SUMMARY_PROMPT, conversation)
+    extracted: dict[str, Any] = call_llm(SESSION_SUMMARY_PROMPT, conversation)
+    extracted["timestamp"] = datetime.now().isoformat()
     summary = extracted.get("session_summary", "")
 
     if summary:
@@ -111,4 +154,4 @@ def session_summary():
         )
         st.session_state.session_summary_saved = True
 
-    return summary
+    return extracted

@@ -26,6 +26,7 @@ if "session_summary_saved" not in st.session_state:
 ROLES = [None, "Student", "Coach"]
 
 chat_ui = st.Page("streamlit_pages/chat_ui.py", title="Chat UI")
+coach_ui = st.Page("streamlit_pages/coach_ui.py", title="Coach UI")
 
 
 def login():
@@ -66,6 +67,6 @@ elif st.session_state.role == "Student":
             }
         )
 else:
-    pg = st.navigation({"Chat": [chat_ui]})
+    pg = st.navigation({"Chat": [coach_ui]})
 
 pg.run()

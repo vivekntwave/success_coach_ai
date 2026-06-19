@@ -1,6 +1,7 @@
 import streamlit as st
 from app.services.chat_service import chatResponse
 from app.services.mem0_upload_service import auto_save_factual_memories, session_summary
+from app.services.google_sheet_service import googleSummaryUpdate
 from defaults import SESSION_DEFAULTS
 
 for message in st.session_state.messages:
@@ -19,6 +20,7 @@ if user_prompt := st.chat_input("Ask Anything"):
 
 if st.button("End Session"):
     summary = session_summary()
+    googleSummaryUpdate(summary)
     for key, value in SESSION_DEFAULTS.items():
         st.session_state[key] = value
     st.rerun()

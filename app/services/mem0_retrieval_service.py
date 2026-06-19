@@ -5,6 +5,7 @@ from pathlib import Path
 import os
 from langchain.tools import tool
 from typing import Any, cast
+from datetime import datetime, timedelta
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
@@ -92,6 +93,17 @@ def mem0_setup():
         Ignore greetings, filler conversation, acknowledgements, and casual small talk.
         """
     )
+
+
+def retrieve_fresh_memories(query: str) -> str:
+    yesterday = datetime.now() - timedelta(days=-1)
+    fresh_memories = mem0_client.get_all(
+        filters={"AND": [{"created_at": {"gte": datetime.now()}}]}
+    )
+    fresh_memory_context = "\n".join(
+        memory["memory"] for memory in fresh_memories["results"]
+    )
+    return fresh_memory_context
 
 
 def retrieve_profile_memories() -> str:
