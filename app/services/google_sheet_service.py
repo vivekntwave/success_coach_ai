@@ -1,54 +1,55 @@
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+import streamlit as st
+import gspread
 import os
+from google.oauth2.service_account import Credentials
 import json
-from dotenv import load_dotenv
 
-load_dotenv()
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+
+@st.cache_resource
+def get_sheets_client():
+    try:
+        creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+        creds = Credentials.from_service_account_info(
+            creds_info,
+            scopes=SCOPES,
+        )
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"Credentials Error: {e}")
+        return None
 
 
 def googleSheetData(student_id: str):
-    SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+    client = get_sheets_client()
 
-    flow = InstalledAppFlow.from_client_config(creds_dict, scopes=SCOPES)
-    creds = flow.run_local_server(port=0)
-    service = build("sheets", "v4", credentials=creds)
+    if client is None:
+        return {}
 
-    SPREADSHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID")
+    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
 
-    spreadsheet = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-    result = {}
+    try:
+        spreadsheet = client.open_by_key(str(spreadsheet_id))
+        result = {}
 
-    for sheet in spreadsheet["sheets"]:
-        sheet_name: str = sheet["properties"]["title"]
-        values = (
-            service.spreadsheets()
-            .values()
-            .get(spreadsheetId=SPREADSHEET_ID, range=sheet_name)
-            .execute()
-            .get("values", [])
-        )
-        if len(values) < 2:
-            continue
-        headers = values[0]
-        if "student_id" not in headers:
-            continue
-        student_col = headers.index("student_id")
-        matches = []
-        for row in values[1:]:
-            if len(row) <= student_col:
+        for worksheet in spreadsheet.worksheets():
+            records = worksheet.get_all_records()
+
+            if not records:
                 continue
 
-            if str(row[student_col]).strip() == str(student_id).strip():
-                matches.append(
-                    {
-                        headers[i]: row[i] if i < len(row) else ""
-                        for i in range(len(headers))
-                    }
-                )
+            matches = [
+                row
+                for row in records
+                if str(row.get("student_id", "")).strip() == str(student_id).strip()
+            ]
 
-        if matches:
-            result[sheet_name] = matches
-    return result
+            if matches:
+                result[worksheet.title] = matches
+
+        return result
+
+    except Exception as e:
+        st.error(f"Google Sheets Error: {e}")
+        return {}

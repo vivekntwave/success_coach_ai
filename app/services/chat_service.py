@@ -1,14 +1,11 @@
 from dotenv import load_dotenv
-from mem0 import MemoryClient
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
-import os
 from chroma_db.chroma_client import search_knowledge_base
 from services.google_sheet_service import googleSheetData
 import streamlit as st
 
 load_dotenv()
-MEM0_API_KEY = os.getenv("MEM0_API_KEY")
 STUDENT_ID = "STU001"
 
 SYSTEM_PROMPT = f"""
@@ -20,9 +17,6 @@ Be supportive but realistic, prioritize accuracy over motivation, and never guar
 The user data is as follows:{googleSheetData(STUDENT_ID)}"""
 
 model = init_chat_model(model="gpt-5.4-mini-2026-03-17", temperature=0.5, timeout=300)
-
-
-client = MemoryClient(api_key=MEM0_API_KEY)
 
 
 def chatResponse(user_prompt: str):
