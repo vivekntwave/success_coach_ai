@@ -28,7 +28,8 @@ if "session_summary_saved" not in st.session_state:
 if "quick_prompt" not in st.session_state:
     st.session_state.quick_prompt = None
 
-if "active_brief" not in st.session_state:
+if "brief_cache" not in st.session_state:
+    st.session_state.brief_cache = {}
     st.session_state.active_brief = None
 
 ROLES = [None, "Student", "Coach"]

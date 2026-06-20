@@ -7,6 +7,7 @@ from streamlit_calendar import calendar
 from app.services.google_sheet_service import googleSheetData
 from app.services.mem0_upload_service import call_llm
 from app.services.google_calendar_service import create_google_calendar_events
+from app.services.coach_chat_service import coachChatResponse
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT_DIR / ".env")
@@ -92,6 +93,68 @@ Requirements:
 """
 
 
+@st.dialog("Student Brief", width="large")
+def show_student_brief(student_id: str):
+
+    if student_id not in st.session_state.brief_cache:
+        with st.spinner("Retrieving memories and generating brief..."):
+            brief = coachChatResponse(
+                f"""
+Generate a coaching brief for student {student_id}.
+
+Use search_knowledge_base to retrieve information specifically for student_id={student_id}.
+
+Use get_all_sheet_data to retrieve academic information for student_id={student_id}.
+
+Use factual memories, session summaries, coaching signals and historical context for this student.
+
+Return a concise coach-facing brief with the following sections:
+
+## Current Situation
+- Academic status
+- Emotional status
+
+## What's Changed
+- Important developments since previous sessions
+
+## Open Concerns
+- Unresolved issues requiring follow-up
+
+## Conversation Starters
+- 3-4 specific questions the coach can use today
+
+Requirements:
+- Focus on recent information.
+- Do not provide a full history dump.
+- Use only information found for this student.
+- If information is missing, say so.
+"""
+            )
+
+            st.session_state.brief_cache[student_id] = brief
+
+    st.markdown(st.session_state.brief_cache[student_id])
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(
+            "🔄 Refresh Brief",
+            key=f"refresh_{student_id}",
+            use_container_width=True,
+        ):
+            del st.session_state.brief_cache[student_id]
+            st.rerun()
+
+    with col2:
+        if st.button(
+            "❌ Close",
+            key=f"close_{student_id}",
+            use_container_width=True,
+        ):
+            st.rerun()
+
+
 def render_severity_badge(severity) -> str:
     if isinstance(severity, int):
         if severity >= 9:
@@ -125,17 +188,33 @@ def render_severity_badge(severity) -> str:
 
 def student_card(session: dict) -> None:
     with st.container(border=True):
-        st.markdown(f"### Student {session['student_id']}")
+        col1, col2 = st.columns([4, 1])
 
-        st.caption(
-            f"{session['session_type']}  ·  "
-            f"{session['start_time']} → {session['end_time']}  ·  "
-            f"{session['session_duration_minutes']} min"
-        )
+        with col1:
+            st.markdown(f"### Student {session['student_id']}")
 
-        st.markdown(render_severity_badge(session["severity"]), unsafe_allow_html=True)
+            st.caption(
+                f"{session['session_type']}  ·  "
+                f"{session['start_time']} → {session['end_time']}  ·  "
+                f"{session['session_duration_minutes']} min"
+            )
 
-        st.write(session["reason"])
+            st.markdown(
+                render_severity_badge(session["severity"]),
+                unsafe_allow_html=True,
+            )
+
+            st.write(session["reason"])
+
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            if st.button(
+                "Get Brief",
+                key=f"brief_{session['student_id']}",
+                use_container_width=True,
+            ):
+                show_student_brief(session["student_id"])
 
 
 def deferred_card(student: dict) -> None:
@@ -220,14 +299,6 @@ st.subheader(f"Today's Students — {len(today)}")
 
 for session in today:
     student_card(session)
-
-if st.session_state.active_brief:
-    student_id = st.session_state.active_brief
-    st.divider()
-    st.subheader(f"Brief — Student {student_id}")
-    st.info(f"Brief for {student_id} will load here once memory retrieval is wired in.")
-    if st.button("Close Brief"):
-        st.session_state.active_brief = None
 
 if deferred:
     st.subheader(f"Deferred to Tomorrow — {len(deferred)}")
