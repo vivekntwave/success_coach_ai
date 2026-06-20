@@ -1,6 +1,8 @@
 import streamlit as st
 import uuid
+from dotenv import load_dotenv
 
+load_dotenv()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -23,10 +25,17 @@ if "last_saved_index" not in st.session_state:
 if "session_summary_saved" not in st.session_state:
     st.session_state.session_summary_saved = False
 
+if "quick_prompt" not in st.session_state:
+    st.session_state.quick_prompt = None
+
+if "active_brief" not in st.session_state:
+    st.session_state.active_brief = None
+
 ROLES = [None, "Student", "Coach"]
 
-chat_ui = st.Page("streamlit_pages/chat_ui.py", title="Chat UI")
+student_chat_ui = st.Page("streamlit_pages/student_chat_ui.py", title="Chat UI")
 coach_ui = st.Page("streamlit_pages/coach_ui.py", title="Coach UI")
+coach_chat_ui = st.Page("streamlit_pages/coach_chat_ui.py", title="Coach Chat UI")
 
 
 def login():
@@ -62,11 +71,16 @@ elif st.session_state.role == "Student":
     else:
         pg = st.navigation(
             {
-                "Chat": [chat_ui],
+                "Chat": [student_chat_ui],
                 "Account": [settings, logout_page],
             }
         )
 else:
-    pg = st.navigation({"Chat": [coach_ui]})
+    pg = st.navigation(
+        {
+            "Chat": [coach_ui, coach_chat_ui],
+            "Account": [settings, logout_page],
+        }
+    )
 
 pg.run()

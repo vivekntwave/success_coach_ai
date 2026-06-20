@@ -2,15 +2,18 @@ import streamlit as st
 import gspread
 import os
 from google.oauth2.service_account import Credentials
+from langchain.tools import tool
 import json
+from functools import lru_cache
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
+creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
 
-@st.cache_resource
+
 def get_sheets_client():
     try:
-        creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
         creds = Credentials.from_service_account_info(
             creds_info,
             scopes=SCOPES,
@@ -22,12 +25,19 @@ def get_sheets_client():
 
 
 def googleSheetData(sheet_name: str):
+    """
+    Retrieve all records from a Google Sheets worksheet.
+
+    Args:
+        sheet_name: Name of the worksheet/tab within the configured spreadsheet.
+        Valid sheet_names are as follows: {"roster","exam_scores","attendance","exam_schedule","signal_sheet"}
+    Returns:
+        A list of dictionaries where each dictionary represents a row from
+        the sheet and keys correspond to column headers.
+    """
     client = get_sheets_client()
     if client is None:
         return {}
-
-    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
-
     try:
         spreadsheet = client.open_by_key(str(spreadsheet_id))
         worksheet = spreadsheet.worksheet(sheet_name)
@@ -38,15 +48,31 @@ def googleSheetData(sheet_name: str):
         return {}
 
 
+@lru_cache(maxsize=1)
+def _cached_sheet_data():
+    sheet_names = [
+        "roster",
+        "exam_scores",
+        "attendance",
+        "exam_schedule",
+        "signal_sheet",
+    ]
+
+    return {sheet: googleSheetData(sheet) for sheet in sheet_names}
+
+
+@tool
+def get_all_sheet_data() -> str:
+    """Retrieve all student operational data."""
+    return json.dumps(_cached_sheet_data(), default=str)
+
+
 @st.cache_resource
 def googleStudentData(student_id: str):
     client = get_sheets_client()
 
     if client is None:
         return {}
-
-    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
-
     try:
         spreadsheet = client.open_by_key(str(spreadsheet_id))
         result = {}
@@ -77,9 +103,8 @@ def googleSummaryUpdate(summary):
     client = get_sheets_client()
     if client is None:
         return False
-    spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
     try:
-        spreadsheet = client.open_by_key(str(spreadsheet_id))
+        spreadsheet = client.open_by_key(str(os.getenv("GOOGLE_SPREADSHEET_ID")))
         worksheet = spreadsheet.worksheet("signal_sheet")
         student_id = str(st.session_state.student_id)
         records = worksheet.get_all_records()
