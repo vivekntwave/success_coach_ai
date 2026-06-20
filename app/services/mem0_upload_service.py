@@ -8,6 +8,7 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 import json
 from typing import Any
+from app.prompts import FACTUAL_EXTRACTION_PROMPT, SESSION_SUMMARY_PROMPT
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
@@ -15,89 +16,21 @@ MEM0_API_KEY = os.getenv("MEM0_API_KEY")
 mem0_client = MemoryClient(api_key=MEM0_API_KEY)
 STUDENT_ID = st.session_state.student_id or "STU001"
 
-FACTUAL_EXTRACTION_PROMPT = """
-You are a memory-extraction assistant for a student coaching platform.
- 
-Given a list of things a student said during a coaching session, extract
-discrete factual memories about the student.
- 
-Cover any of: goals, challenges, stress triggers, motivators,
-habits_and_routines, learning_preferences, strengths, growth_areas,
-success_patterns, failure_patterns, coach_insights, personal_context.
- 
-Rules:
-- One fact per item — short, specific, reusable across future sessions.
-- Skip greetings, filler, acknowledgements, and casual small talk.
-- If nothing factual is present, return an empty array.
- 
-Return ONLY valid JSON — no markdown fences, no preamble:
-{"factual_memories": ["...", "..."]}
-"""
-
-SESSION_SUMMARY_PROMPT = """
-You are a coaching session summariser.
-
-Given a full coaching conversation (both coach and student turns), produce a
-comprehensive coaching summary that will be used as long-term memory and future
-session context.
-
-The session_summary should be a single concise narrative (4-8 sentences)
-covering:
-
-* Main discussion topics
-* Current academic situation
-* Current emotional situation
-* Significant changes since previous sessions
-* Unresolved concerns or risks
-* Student commitments and action items
-* Coach follow-up items
-* Key insights, decisions, or breakthroughs
-
-Also generate a coaching signal representing the most important concern arising
-from this session.
-
-Return ONLY valid JSON:
-
-{
-"session_summary": "...",
-"student_id": "...",
-"signal_type": "...",
-"severity": high,
-"urgency": high,
-"reason": "...",
-"timestamp": "..."
-}
-
-Field definitions:
-
-* student_id: Student identifier provided in the input.
-* signal_type: One of ["crisis", "check_in", "follow_up"].
-* severity: Integer from [critical,high,medium,low] representing how serious the issue is.
-* urgency: Integer from [critical,high,medium,low] representing how quickly the coach should act.
-* reason: One-sentence explanation for the signal and score assignment.
-* timestamp: Session timestamp provided in the input.
-
-Scoring guidance:
-
-* Severity measures seriousness of the issue.
-* Urgency measures whether action is needed today versus later.
-* High severity does not automatically imply high urgency.
-* If no meaningful concern exists, use low severity and urgency scores rather than inventing a problem.
-
-Return ONLY the JSON object.
-"""
 
 model = init_chat_model(model="gpt-5.4-mini-2026-03-17", temperature=0.5, timeout=300)
 
 
 def call_llm(prompt: str, user_content: str):
     agent = create_agent(model=model, system_prompt=prompt)
+
     results = agent.invoke({"messages": [{"role": "user", "content": user_content}]})
+
     response_text = results["messages"][-1].content_blocks[0]["text"]
+
     try:
         return json.loads(response_text)
     except json.JSONDecodeError:
-        return {"factual_memories": []}
+        raise ValueError(f"LLM did not return valid JSON:\n{response_text}")
 
 
 def auto_save_factual_memories() -> int:

@@ -1,6 +1,7 @@
 import streamlit as st
 import uuid
 from dotenv import load_dotenv
+from defaults import DEFAULTS
 
 load_dotenv()
 
@@ -48,7 +49,8 @@ def login():
 
 
 def logout():
-    st.session_state.role = None
+    for key, value in DEFAULTS.items():
+        st.session_state[key] = value
     st.rerun()
 
 

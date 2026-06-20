@@ -8,89 +8,12 @@ from app.services.google_sheet_service import googleSheetData
 from app.services.mem0_upload_service import call_llm
 from app.services.google_calendar_service import create_google_calendar_events
 from app.services.coach_chat_service import coachChatResponse
+from app.prompts import COACH_DAILY_PLAN_PROMPT
+from streamlit_autorefresh import st_autorefresh
+from app.services.google_calendar_service import get_today_coaching_events
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT_DIR / ".env")
-
-COACH_DAILY_PLAN_PROMPT = """
-You are an AI coaching operations planner.
-
-Your task is to build a complete coaching schedule for today.
-
-Input:
-A list of student signals.
-
-Each signal contains:
-- student_id
-- signal_type
-- severity
-- urgency
-- reason
-- timestamp
-
-Definitions:
-
-Severity:
-How serious the underlying issue is.
-
-Urgency:
-Whether the coach should act today or whether the issue can safely wait.
-
-Scheduling Rules:
-
-1. Prioritize urgency first.
-2. Use severity as a secondary factor.
-3. Students with crisis-level concerns should be scheduled first.
-4. Create an efficient coaching day with minimal idle gaps.
-5. Schedule only students that justify coach attention today.
-6. Lower-priority students should be deferred.
-7. Do not simply sort by score. Apply coaching judgment.
-8. Every scheduled student must have a reason.
-
-Assume:
-- Coach workday starts at 09:00.
-- Coach workday ends at 17:00.
-- Lunch break: 13:00-14:00.
-- Buffer between sessions: 5 minutes.
-
-Duration Guidelines:
-- Crisis: 45 minutes
-- Follow-up: 30 minutes
-- Check-in: 20 minutes
-
-Return ONLY valid JSON.
-
-{
-  "today": [
-    {
-      "student_id": "",
-      "session_type": "",
-      "severity": "",
-      "urgency": "",
-      "session_duration_minutes": 0,
-      "start_time": "",
-      "end_time": "",
-      "reason": "",
-      "calendar_title": ""
-    }
-  ],
-  "deferred": [
-    {
-      "student_id": "",
-      "reason": ""
-    }
-  ]
-}
-
-Requirements:
-- Generate a realistic schedule.
-- No overlapping sessions.
-- Respect working hours.
-- Include exact start and end times.
-- Keep reason under 20 words.
-- calendar_title should be suitable for a Google Calendar event.
-- Output JSON only.
-"""
 
 
 @st.dialog("Student Brief", width="large")
@@ -234,38 +157,131 @@ if "plan" not in st.session_state:
 if "active_brief" not in st.session_state:
     st.session_state.active_brief = None
 
+if "plan_generated_at" not in st.session_state:
+    st.session_state.plan_generated_at = None
+if st.session_state.plan is None:
+    existing_sessions = get_today_coaching_events()
+
+    if existing_sessions:
+        st.session_state.plan = {
+            "summary": "Loaded from Google Calendar",
+            "today": existing_sessions,
+            "deferred": [],
+            "changes": [],
+            "conflicts": [],
+            "coach_review_required": False,
+        }
+if st.session_state.plan:
+    st_autorefresh(
+        interval=300000,
+        key="replan_checker",
+    )
+alerts = googleSheetData("replan_alerts")
+
+new_alerts = []
+
+if st.session_state.plan and st.session_state.plan_generated_at:
+    plan_time = st.session_state.plan_generated_at
+    new_alerts = [
+        alert
+        for alert in alerts
+        if alert.get("processed", "No") == "No"
+        and alert.get("created_at", "") > plan_time
+    ]
+
+if new_alerts:
+    st.warning(f"{len(new_alerts)} student update(s) may affect the current plan.")
+
+    with st.expander("View Updates", expanded=True):
+        for alert in new_alerts:
+            st.write(f"{alert['student_id']} - {alert['reason']}")
+
+
+def is_actioned(row: dict) -> bool:
+    val = (
+        str(
+            next(
+                (v for k, v in row.items() if k.strip().lower() == "actioned"),
+                "",
+            )
+        )
+        .strip()
+        .lower()
+    )
+    return val in ("yes", "true", "1", "y")
+
+
+if new_alerts:
+    if st.button(
+        "Refresh Plan",
+        type="primary",
+        use_container_width=True,
+    ):
+        raw_signals = googleSheetData("signal_sheet")
+
+        signals = [s for s in raw_signals if not is_actioned(s)]
+
+        planner_input = {
+            "signals": signals,
+            "replan_alerts": new_alerts,
+        }
+
+        st.session_state.plan = call_llm(
+            COACH_DAILY_PLAN_PROMPT,
+            json.dumps(
+                planner_input,
+                indent=2,
+                default=str,
+            ),
+        )
+
+        st.session_state.plan_generated_at = datetime.now().isoformat()
+
+        st.rerun()
+
 if st.button("Generate My Day", type="primary", use_container_width=True):
     with st.spinner("Generating today's coaching plan..."):
         raw_signals = googleSheetData("signal_sheet")
-
-        def is_actioned(row: dict) -> bool:
-            val = (
-                str(
-                    next(
-                        (v for k, v in row.items() if k.strip().lower() == "actioned"),
-                        "",
-                    )
-                )
-                .strip()
-                .lower()
-            )
-            return val in ("yes", "true", "1", "y")
 
         signals = [s for s in raw_signals if not is_actioned(s)]
         if not signals:
             st.warning("No pending signals found in the sheet.")
             st.stop()
-        user_content = json.dumps(signals, indent=2, default=str)
-        st.session_state.plan = call_llm(COACH_DAILY_PLAN_PROMPT, user_content)
-        st.session_state.active_brief = None  # reset brief on new plan
+        planner_input = {
+            "signals": signals,
+            "replan_alerts": [],
+        }
+
+        st.session_state.plan = call_llm(
+            COACH_DAILY_PLAN_PROMPT,
+            json.dumps(
+                planner_input,
+                indent=2,
+                default=str,
+            ),
+        )
+
+        st.session_state.plan_generated_at = datetime.now().isoformat()
+        st.session_state.active_brief = None
+        st.rerun()
 
 if not st.session_state.plan:
     st.info("Click **Generate My Day** to build today's schedule.")
     st.stop()
 plan = st.session_state.plan
+if plan.get("summary"):
+    st.info(plan["summary"])
 today = plan.get("today", [])
 deferred = plan.get("deferred", [])
+changes = plan.get("changes", [])
 
+if changes:
+    st.subheader("Plan Changes")
+
+    for change in changes:
+        with st.container(border=True):
+            st.write(f"{change['student_id']} - {change['change']}")
+            st.caption(change["reason"])
 st.subheader("Today's Schedule")
 schedule_date = datetime.today().date()
 
@@ -304,8 +320,32 @@ if deferred:
     st.subheader(f"Deferred to Tomorrow — {len(deferred)}")
     for student in deferred:
         deferred_card(student)
+conflicts = plan.get("conflicts", [])
+
+if conflicts:
+    st.subheader("Coach Review Required")
+
+    for conflict in conflicts:
+        with st.container(border=True):
+            st.write(f"{conflict['student_1']} vs {conflict['student_2']}")
+            st.caption(conflict["reason"])
+
+review_required = plan.get(
+    "coach_review_required",
+    False,
+)
+
+if review_required:
+    st.warning("Coach review required before finalizing schedule.")
 
 if today:
     st.divider()
-    if st.button("Confirm Plan", type="primary", use_container_width=True):
+
+    if st.button(
+        "Confirm Plan",
+        type="primary",
+        use_container_width=True,
+    ):
         create_google_calendar_events(today)
+
+        st.success("Google Calendar events created successfully.")

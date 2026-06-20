@@ -5,6 +5,12 @@ from google.oauth2.service_account import Credentials
 from langchain.tools import tool
 import json
 from functools import lru_cache
+from app.services.call_agent import merge_signals_with_llm
+from app.services.replan_alerts import (
+    build_alert_reason,
+    create_replan_alert,
+    should_create_replan_alert,
+)
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
@@ -105,30 +111,111 @@ def googleSummaryUpdate(summary):
         return False
     try:
         spreadsheet = client.open_by_key(str(os.getenv("GOOGLE_SPREADSHEET_ID")))
-        worksheet = spreadsheet.worksheet("signal_sheet")
+        signal_sheet = spreadsheet.worksheet("signal_sheet")
         student_id = str(st.session_state.student_id)
-        records = worksheet.get_all_records()
+        records = signal_sheet.get_all_records()
+        existing_record = None
         row_number = None
-        for idx, record in enumerate(records, start=2):  # header is row 1
-            if str(record["student_id"]) == student_id:
+        for idx, record in enumerate(records, start=2):
+            if str(record.get("student_id")) == student_id:
+                existing_record = record
                 row_number = idx
                 break
+        if (
+            existing_record
+            and str(
+                existing_record.get(
+                    "actioned",
+                    "No",
+                )
+            )
+            .strip()
+            .lower()
+            == "no"
+        ):
+            final_signal = merge_signals_with_llm(
+                existing_signal=existing_record,
+                new_signal=summary,
+            )
+        else:
+            final_signal = summary
+
+        if existing_record:
+            old_urgency = int(
+                existing_record.get(
+                    "urgency_score",
+                    0,
+                )
+                or 0
+            )
+
+            old_severity = str(
+                existing_record.get(
+                    "severity",
+                    "low",
+                )
+            )
+
+            new_urgency = int(
+                final_signal.get(
+                    "urgency_score",
+                    0,
+                )
+                or 0
+            )
+
+            new_severity = str(
+                final_signal.get(
+                    "severity",
+                    "low",
+                )
+            )
+
+            if should_create_replan_alert(
+                old_urgency=old_urgency,
+                new_urgency=new_urgency,
+                old_severity=old_severity,
+                new_severity=new_severity,
+            ):
+                create_replan_alert(
+                    spreadsheet=spreadsheet,
+                    student_id=student_id,
+                    severity=final_signal.get("severity"),
+                    urgency=final_signal.get("urgency"),
+                    reason=build_alert_reason(
+                        old_urgency=old_urgency,
+                        new_urgency=new_urgency,
+                        old_severity=old_severity,
+                        new_severity=new_severity,
+                    ),
+                )
+
         row = [
             student_id,
-            str(summary["signal_type"]),
-            str(summary["severity"]),
-            str(summary["urgency"]),
-            str(summary["reason"]),
-            str(summary["timestamp"]),
+            final_signal.get("signal_type"),
+            final_signal.get("severity"),
+            final_signal.get("severity_score"),
+            final_signal.get("urgency"),
+            final_signal.get("urgency_score"),
+            final_signal.get("schedule_recommendation"),
+            str(
+                final_signal.get(
+                    "coach_review_required",
+                    False,
+                )
+            ),
+            final_signal.get("reason"),
+            final_signal.get("timestamp"),
             "No",
         ]
         if row_number:
-            worksheet.update(range_name=f"A{row_number}:G{row_number}", values=[row])
+            signal_sheet.update(
+                range_name=f"A{row_number}:K{row_number}",
+                values=[row],
+            )
         else:
-            worksheet.append_row(row)
-
+            signal_sheet.append_row(row)
         return True
-
     except Exception as e:
         st.error(f"Google Sheets Error: {e}")
         return False

@@ -25,5 +25,6 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
     "streamlit>=1.58.0",
+    "streamlit-autorefresh>=1.0.1",
     "streamlit-calendar>=1.4.0",
 ]
