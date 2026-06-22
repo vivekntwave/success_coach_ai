@@ -33,6 +33,9 @@ if "brief_cache" not in st.session_state:
     st.session_state.brief_cache = {}
     st.session_state.active_brief = None
 
+if "system_prompt" not in st.session_state:
+    st.session_state.system_prompt = ""
+
 ROLES = [None, "Student", "Coach"]
 
 student_chat_ui = st.Page("streamlit_pages/student_chat_ui.py", title="Chat UI")

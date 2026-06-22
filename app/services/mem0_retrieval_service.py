@@ -10,7 +10,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
 MEM0_API_KEY = os.getenv("MEM0_API_KEY")
 mem0_client = MemoryClient(api_key=MEM0_API_KEY)
-STUDENT_ID = st.session_state.student_id or "STU001"
+STUDENT_ID = st.session_state.student_id
 
 
 def mem0_setup():
@@ -118,15 +118,16 @@ def retrieve_profile_memories() -> str:
 
 
 @tool
-def retrieve_memories(query: str, limit: int = 5) -> str:
+def retrieve_memories(student_id, query: str, limit: int = 5) -> str:
     """
-    Retrieve memories from Mem0 based on a query.
+    retrieve memories from mem0 based on a query.
 
-    Args:
-        query (str): The search query to retrieve memories.
-        limit (int): The maximum number of memories to retrieve. Default is 5.
+    args:
+        student_id: the student_id of the user
+        query (str): the search query to retrieve memories.
+        limit (int): the maximum number of memories to retrieve. default is 5.
     """
-    memories = mem0_client.search(query, filters={"user_id": STUDENT_ID}, top_k=limit)
+    memories = mem0_client.search(query, filters={"user_id": student_id}, top_k=limit)
     context = "\\n".join(m["memory"] for m in memories["results"])
     return context
 
